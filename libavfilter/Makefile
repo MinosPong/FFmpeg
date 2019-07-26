@@ -480,7 +480,7 @@ OBJS-$(CONFIG_AMOVIE_FILTER)                 += src_movie.o
 OBJS-$(CONFIG_MOVIE_FILTER)                  += src_movie.o
 
 # QBRET
-OBJS-$(CONFIG_RESIDUAL_FILTER)             += vf_residual.o
+OBJS-$(CONFIG_QBRESIDUAL_FILTER)             += vf_qbresidual.o
 
 
 

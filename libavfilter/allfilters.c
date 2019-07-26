@@ -458,7 +458,7 @@ extern AVFilter ff_avsrc_amovie;
 extern AVFilter ff_avsrc_movie;
 
 /* QBRET filter */
-extern AVFilter ff_vf_residual;
+extern AVFilter ff_vf_qbresidual;
 
 
 /* those filters are part of public or internal API,

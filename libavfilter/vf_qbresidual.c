@@ -20,7 +20,7 @@
 
 /**
  * @file
- * Residual filter
+ * QBResidual filter
  *
  * @see https://en.wikipedia.org/wiki/Canny_edge_detector
  */
@@ -55,7 +55,7 @@ struct plane_info {
     int      width, height;
 };
 
-typedef struct ResidualContext {
+typedef struct QBResidualContext {
     const AVClass *class;
     struct plane_info planes[3];
     int filter_planes;
@@ -63,11 +63,11 @@ typedef struct ResidualContext {
     double   low, high;
     uint8_t  low_u8, high_u8;
     int mode;
-} ResidualContext;
+} QBResidualContext;
 
-#define OFFSET(x) offsetof(ResidualContext, x)
+#define OFFSET(x) offsetof(QBResidualContext, x)
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM
-static const AVOption residual_options[] = {
+static const AVOption qbresidual_options[] = {
     { "high", "set high threshold", OFFSET(high), AV_OPT_TYPE_DOUBLE, {.dbl=50/255.}, 0, 1, FLAGS },
     { "low",  "set low threshold",  OFFSET(low),  AV_OPT_TYPE_DOUBLE, {.dbl=20/255.}, 0, 1, FLAGS },
     { "mode", "set mode", OFFSET(mode), AV_OPT_TYPE_INT, {.i64=MODE_WIRES}, 0, NB_MODE-1, FLAGS, "mode" },
@@ -84,31 +84,31 @@ static const AVOption residual_options[] = {
     { NULL }
 };
 
-AVFILTER_DEFINE_CLASS(residual);
+AVFILTER_DEFINE_CLASS(qbresidual);
 
 static av_cold int init(AVFilterContext *ctx)
 {
-    ResidualContext *residual = ctx->priv;
+    QBResidualContext *qbresidual = ctx->priv;
 
-    residual->low_u8  = residual->low  * 255. + .5;
-    residual->high_u8 = residual->high * 255. + .5;
+    qbresidual->low_u8  = qbresidual->low  * 255. + .5;
+    qbresidual->high_u8 = qbresidual->high * 255. + .5;
     return 0;
 }
 
 static int query_formats(AVFilterContext *ctx)
 {
-    const ResidualContext *residual = ctx->priv;
+    const QBResidualContext *qbresidual = ctx->priv;
     static const enum AVPixelFormat wires_pix_fmts[] = {AV_PIX_FMT_GRAY8, AV_PIX_FMT_NONE};
     static const enum AVPixelFormat canny_pix_fmts[] = {AV_PIX_FMT_YUV420P, AV_PIX_FMT_YUV422P, AV_PIX_FMT_YUV444P, AV_PIX_FMT_GBRP, AV_PIX_FMT_GRAY8, AV_PIX_FMT_NONE};
     static const enum AVPixelFormat colormix_pix_fmts[] = {AV_PIX_FMT_GBRP, AV_PIX_FMT_GRAY8, AV_PIX_FMT_NONE};
     AVFilterFormats *fmts_list;
     const enum AVPixelFormat *pix_fmts = NULL;
 
-    if (residual->mode == MODE_WIRES) {
+    if (qbresidual->mode == MODE_WIRES) {
         pix_fmts = wires_pix_fmts;
-    } else if (residual->mode == MODE_COLORMIX) {
+    } else if (qbresidual->mode == MODE_COLORMIX) {
         pix_fmts = colormix_pix_fmts;
-    } else if (residual->mode == MODE_CANNY) {
+    } else if (qbresidual->mode == MODE_CANNY) {
         pix_fmts = canny_pix_fmts;
     } else {
         av_assert0(0);
@@ -123,12 +123,12 @@ static int config_props(AVFilterLink *inlink)
 {
     int p;
     AVFilterContext *ctx = inlink->dst;
-    ResidualContext *residual = ctx->priv;
+    QBResidualContext *qbresidual = ctx->priv;
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(inlink->format);
 
-    residual->nb_planes = inlink->format == AV_PIX_FMT_GRAY8 ? 1 : 3;
-    for (p = 0; p < residual->nb_planes; p++) {
-        struct plane_info *plane = &residual->planes[p];
+    qbresidual->nb_planes = inlink->format == AV_PIX_FMT_GRAY8 ? 1 : 3;
+    for (p = 0; p < qbresidual->nb_planes; p++) {
+        struct plane_info *plane = &qbresidual->planes[p];
         int vsub = p ? desc->log2_chroma_h : 0;
         int hsub = p ? desc->log2_chroma_w : 0;
 
@@ -322,12 +322,12 @@ static void color_mix(int w, int h,
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx = inlink->dst;
-    ResidualContext *residual = ctx->priv;
+    QBResidualContext *qbresidual = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
     int p, direct = 0;
     AVFrame *out;
 
-    if (residual->mode != MODE_COLORMIX && av_frame_is_writable(in)) {
+    if (qbresidual->mode != MODE_COLORMIX && av_frame_is_writable(in)) {
         direct = 1;
         out = in;
     } else {
@@ -339,15 +339,15 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         av_frame_copy_props(out, in);
     }
 
-    for (p = 0; p < residual->nb_planes; p++) {
-        struct plane_info *plane = &residual->planes[p];
+    for (p = 0; p < qbresidual->nb_planes; p++) {
+        struct plane_info *plane = &qbresidual->planes[p];
         uint8_t  *tmpbuf     = plane->tmpbuf;
         uint16_t *gradients  = plane->gradients;
         int8_t   *directions = plane->directions;
         const int width      = plane->width;
         const int height     = plane->height;
 
-        if (!((1 << p) & residual->filter_planes)) {
+        if (!((1 << p) & qbresidual->filter_planes)) {
             if (!direct)
                 av_image_copy_plane(out->data[p], out->linesize[p],
                                     in->data[p], in->linesize[p],
@@ -375,12 +375,12 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
                                 gradients, width);
 
         /* keep high values, or low values surrounded by high values */
-        double_threshold(residual->low_u8, residual->high_u8,
+        double_threshold(qbresidual->low_u8, qbresidual->high_u8,
                          width, height,
                          out->data[p], out->linesize[p],
                          tmpbuf,       width);
 
-        if (residual->mode == MODE_COLORMIX) {
+        if (qbresidual->mode == MODE_COLORMIX) {
             color_mix(width, height,
                       out->data[p], out->linesize[p],
                       in->data[p], in->linesize[p]);
@@ -395,17 +395,17 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 static av_cold void uninit(AVFilterContext *ctx)
 {
     int p;
-    ResidualContext *residual = ctx->priv;
+    QBResidualContext *qbresidual = ctx->priv;
 
-    for (p = 0; p < residual->nb_planes; p++) {
-        struct plane_info *plane = &residual->planes[p];
+    for (p = 0; p < qbresidual->nb_planes; p++) {
+        struct plane_info *plane = &qbresidual->planes[p];
         av_freep(&plane->tmpbuf);
         av_freep(&plane->gradients);
         av_freep(&plane->directions);
     }
 }
 
-static const AVFilterPad residual_inputs[] = {
+static const AVFilterPad qbresidual_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
@@ -415,7 +415,7 @@ static const AVFilterPad residual_inputs[] = {
     { NULL }
 };
 
-static const AVFilterPad residual_outputs[] = {
+static const AVFilterPad qbresidual_outputs[] = {
     {
         .name = "default",
         .type = AVMEDIA_TYPE_VIDEO,
@@ -423,15 +423,15 @@ static const AVFilterPad residual_outputs[] = {
     { NULL }
 };
 
-AVFilter ff_vf_residual = {
-    .name          = "residual",
+AVFilter ff_vf_qbresidual = {
+    .name          = "qbresidual",
     .description   = NULL_IF_CONFIG_SMALL("Detect and draw edge."),
-    .priv_size     = sizeof(ResidualContext),
+    .priv_size     = sizeof(QBResidualContext),
     .init          = init,
     .uninit        = uninit,
     .query_formats = query_formats,
-    .inputs        = residual_inputs,
-    .outputs       = residual_outputs,
-    .priv_class    = &residual_class,
+    .inputs        = qbresidual_inputs,
+    .outputs       = qbresidual_outputs,
+    .priv_class    = &qbresidual_class,
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
 };
