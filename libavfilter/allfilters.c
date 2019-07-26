@@ -457,6 +457,10 @@ extern AVFilter ff_vaf_spectrumsynth;
 extern AVFilter ff_avsrc_amovie;
 extern AVFilter ff_avsrc_movie;
 
+/* QBRET filter */
+extern AVFilter ff_vf_residual;
+
+
 /* those filters are part of public or internal API,
  * they are formatted to not be found by the grep
  * as they are manually added again (due to their 'names'

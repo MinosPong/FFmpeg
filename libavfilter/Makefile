@@ -479,6 +479,11 @@ OBJS-$(CONFIG_SPECTRUMSYNTH_FILTER)          += vaf_spectrumsynth.o
 OBJS-$(CONFIG_AMOVIE_FILTER)                 += src_movie.o
 OBJS-$(CONFIG_MOVIE_FILTER)                  += src_movie.o
 
+# QBRET
+OBJS-$(CONFIG_RESIDUAL_FILTER)             += vf_residual.o
+
+
+
 # Windows resource file
 SLIBOBJS-$(HAVE_GNU_WINDRES)                 += avfilterres.o
 
