@@ -145,13 +145,14 @@ static int config_props(AVFilterLink *inlink)
         return AVERROR(EIO);
     }
 
-
-
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(inlink->format);
     for (p = 0; p < qbresidual->nb_planes; p++) {
         struct plane_info *plane = &qbresidual->planes[p];
+        int vsub = p ? desc->log2_chroma_h : 0;
+        int hsub = p ? desc->log2_chroma_w : 0;
 
-        plane->width      = inlink->w;
-        plane->height     = inlink->h;
+        plane->width      = AV_CEIL_RSHIFT(inlink->w, hsub);
+        plane->height     = AV_CEIL_RSHIFT(inlink->h, vsub);
         plane->residual   = av_malloc(plane->width * plane->height);
         plane->bytewidth  = av_image_get_linesize(inlink->format,inlink->w, p);
         if (!plane->residual)
@@ -224,13 +225,13 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
 
     //const int width      = outlink->w;
-    const int height     = outlink->h;
+    //const int height     = outlink->h;
 
     int p = 0;
     for(p=0 ;p < qbresidual->nb_planes; p++){
         if(out != in ){
             struct plane_info *plane = &qbresidual->planes[p];
-            av_image_copy_plane(out->data[p], out->linesize[p], in->data[p], in->linesize[p], plane->bytewidth, plane->height)
+            av_image_copy_plane(out->data[p], out->linesize[p], in->data[p], in->linesize[p], plane->bytewidth, plane->height);
         }
         //color_mix(width, height,
         //            out->data[p], out->linesize[p],
