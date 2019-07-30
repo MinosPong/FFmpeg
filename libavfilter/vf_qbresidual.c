@@ -39,6 +39,7 @@
 
 struct plane_info {
     int8_t   *residual;
+    int      bytewidth;
     int      width, height;
 };
 
@@ -129,7 +130,7 @@ static int config_props(AVFilterLink *inlink)
 
     qbresidual->input.width    = inlink->w;
     qbresidual->input.height   = inlink->h;
-    qbresidual->input.channels = 3;
+    qbresidual->input.channels = 1;
 
     result = (qbresidual->model->set_input_output)(qbresidual->model->model, &qbresidual->input, "x", &model_output_name, 1);
     if (result != DNN_SUCCESS) {
@@ -144,12 +145,15 @@ static int config_props(AVFilterLink *inlink)
         return AVERROR(EIO);
     }
 
+
+
     for (p = 0; p < qbresidual->nb_planes; p++) {
         struct plane_info *plane = &qbresidual->planes[p];
 
         plane->width      = inlink->w;
         plane->height     = inlink->h;
         plane->residual   = av_malloc(plane->width * plane->height);
+        plane->bytewidth  = av_image_get_linesize(inlink->format,inlink->w, p);
         if (!plane->residual)
             return AVERROR(ENOMEM);
     }
@@ -176,12 +180,26 @@ static void random_residual(AVLFG *rand_state, int w, int h,
 }*/
 
 
+static void color_mix(int w, int h,
+                            uint8_t *dst, int dst_linesize,
+                      const uint8_t *src, int src_linesize)
+{
+    int i, j;
+
+    for (j = 0; j < h; j++) {
+        for (i = 0; i < w; i++)
+            dst[i] = (dst[i] + src[i]) >> 1;
+        dst += dst_linesize;
+        src += src_linesize;
+    }
+}
+
+
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx = inlink->dst;
     QBResidualContext *qbresidual = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
-    int p = 0;
     AVFrame *out, *frame;
 
     //create out frame
@@ -199,14 +217,30 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     frame = in;
     av_log(ctx, AV_LOG_INFO,
             "n:%4"PRId64" pos:%9"PRId64" "
-            "s:%dx%d ",
+            "s:%dx%d writable:%d",
             inlink->frame_count_out,
             frame->pkt_pos,
-            frame->width, frame->height);
+            frame->width, frame->height, out == in ? 1 : 0);
+
+
+    //const int width      = outlink->w;
+    const int height     = outlink->h;
+
+    int p = 0;
+    for(p=0 ;p < qbresidual->nb_planes; p++){
+        if(out != in ){
+            struct plane_info *plane = &qbresidual->planes[p];
+            av_image_copy_plane(out->data[p], out->linesize[p], in->data[p], in->linesize[p], plane->bytewidth, plane->height)
+        }
+        //color_mix(width, height,
+        //            out->data[p], out->linesize[p],
+        //            in->data[p], in->linesize[p]);
+    }
 
     //clear up
-    if (out != in)
+    if (out != in) {
         av_frame_free(&in);
+    }
     return ff_filter_frame(outlink, out);
 }
 
