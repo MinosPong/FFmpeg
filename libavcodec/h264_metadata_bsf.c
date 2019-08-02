@@ -20,6 +20,7 @@
 #include "libavutil/display.h"
 #include "libavutil/common.h"
 #include "libavutil/opt.h"
+#include "libavformat/avio.h"
 
 #include "bsf.h"
 #include "cbs.h"
@@ -415,6 +416,43 @@ static int h264_metadata_filter(AVBSFContext *bsf, AVPacket *pkt)
                 goto fail;
             }
 
+        } else if (j == 32 && ctx->sei_user_data[i] == '~' ){
+            AVIOContext *sei_file_context;
+            unsigned char *file_data = NULL;
+            long size, bytes_read;
+
+            const char *sei_filename = ctx->sei_user_data + i + 1;
+            if (avio_open(&sei_file_context, sei_filename, AVIO_FLAG_READ) < 0){
+                av_log(bsf, AV_LOG_ERROR, "Failed to open SEI file \"%s\".\n", sei_filename);
+                goto fail;
+            }
+            size = avio_size(sei_file_context);
+            file_data = av_malloc(size + 1);
+            if (!file_data) {
+                avio_closep(&sei_file_context);
+                err = AVERROR(ENOMEM);
+                goto fail;
+            }
+
+            bytes_read = avio_read(sei_file_context, file_data, size);
+            avio_closep(&sei_file_context);
+            
+            if (bytes_read != size){
+                av_freep(&file_data);
+                av_log(bsf, AV_LOG_ERROR, "Failed to open SEI file \"%s\". size not match\n", sei_filename);
+                goto fail;
+            }
+
+            udu->data_ref    = av_buffer_create((uint8_t *)file_data, size + 1, av_buffer_default_free, NULL, 0); 
+            udu->data        = udu->data_ref->data;
+            udu->data_length = size + 1;
+
+            err = ff_cbs_h264_add_sei_message(ctx->cbc, au, &payload);
+            if (err < 0) {
+                av_log(bsf, AV_LOG_ERROR, "Failed to add user data SEI "
+                       "message to access unit.\n");
+                goto fail;
+            }
         } else {
         invalid_user_data:
             av_log(bsf, AV_LOG_ERROR, "Invalid user data: "
